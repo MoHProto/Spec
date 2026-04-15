@@ -141,11 +141,24 @@ If a client or server supports extended Markdown features (e.g., GFM, CommonMark
 * **Default (if absent):** `original`
 * **Common values:** `gfm`, `commonmark`, `multimarkdown`.
 
-### 5.3 Visual Hints (UI/UX)
-MoH supports specific headers to provide a consistent visual identity within client applications. Clients **SHOULD** use these headers to theme the message representation.
+### 7.3 Response Metadata (`X-MoH-Extra-*`)
+Servers **MAY** attach optional string metadata to responses using headers whose names begin with `X-MoH-Extra-` followed by a suffix derived from a **logical key**:
 
-* **`X-MoH-Icon-Emoji`**: A single Unicode emoji character representing the service or message context (e.g., `🚀`, `📡`).
-* **`X-MoH-Icon-Color`**: The background or accent color for the icon/UI, defined strictly as a **Hexadecimal color code**.
+* **Logical key**: A camelCase identifier (e.g., `title`, `icon`, `iconUrl`).
+* **Header name**: `X-MoH-Extra-` + each word of the logical key split from camelCase, converted to **Title-Case**, joined by hyphens (`-`).
+    * `title` → `X-MoH-Extra-Title`
+    * `icon` → `X-MoH-Extra-Icon`
+    * `iconUrl` → `X-MoH-Extra-Icon-Url`
+* **Value**: UTF-8 string (header value encoding follows HTTP semantics).
+
+Clients **SHOULD** parse all `X-MoH-Extra-*` headers into a map keyed by the logical camelCase key (reverse of the mapping above) and **SHOULD** use this map for UI hints (titles, icons, colors) without embedding that metadata in the Markdown body.
+
+### 7.4 Visual Hints (UI/UX)
+MoH uses `X-MoH-Extra-*` headers to provide a consistent visual identity within client applications. Clients **SHOULD** use these headers to theme the message representation.
+
+* **`X-MoH-Extra-Icon`**: A single Unicode emoji character representing the service or message context (e.g., `🚀`, `📡`).
+* **`X-MoH-Extra-Title`**: A short human-readable title for the message or view.
+* **`X-MoH-Extra-Icon-Color`**: Logical key `iconColor` — the background or accent color for the icon/UI, defined strictly as a **Hexadecimal color code**.
     * **Format**: `^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$` (e.g., `#FF5733` or `#F00`).
     * **Constraint**: Clients **MUST** reject or ignore non-HEX values to ensure predictable rendering.
 
@@ -160,8 +173,9 @@ Host: gateway.mohproto.org
 X-MoH-Sub: status_bot_01
 X-MoH-Timestamp: 1713200800
 X-MoH-Sig: 7a8b9c...
-X-MoH-Icon-Emoji: ✅
-X-MoH-Icon-Color: #2ECC71
+X-MoH-Extra-Title: Monitoring
+X-MoH-Extra-Icon: ✅
+X-MoH-Extra-Icon-Color: #2ECC71
 
 # System Healthy
 All nodes are reporting 100% uptime.
@@ -176,8 +190,8 @@ Host: api.mohproto.org
 X-MoH-Sub: esp32_sensor_09
 X-MoH-Timestamp: 1713200900
 X-MoH-Sig: 2d3e4f...
-X-MoH-Icon-Emoji: 🔋
-X-MoH-Icon-Color: #F00
+X-MoH-Extra-Icon: 🔋
+X-MoH-Extra-Icon-Color: #F00
 
 # Battery Low
 Sensor level: 12%
