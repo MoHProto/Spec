@@ -26,48 +26,106 @@ All MoH requests and responses containing a body **MUST** use the following Medi
 ---
 
 ## 3. Identification and Security
-MoH relies on asymmetric cryptography to ensure the authenticity and integrity of messages.
 
-### 3.1 Subject Identification (`X-MoH-Sub`)
-The `X-MoH-Sub` header identifies the message sender. It **SHOULD** be a unique identifier (UID) or the Base64/Hex representation of the sender's public key.
+MoH supports both **Authorized** and **Anonymous** interactions. 
 
-### 3.2 Digital Signature (`X-MoH-Sig`)
-Every state-changing request (POST/PUT) **MUST** include an `X-MoH-Sig` header.
-* **Algorithm**: Ed25519.
-* **Encoding**: Base64 or Hex.
+### 3.1 Authorization Status
+* **Authorized Request**: MUST include both `X-MoH-Sub` and `X-MoH-Sig`.
+* **Anonymous Request**: Occurs when `X-MoH-Sub` and/or `X-MoH-Sig` are absent. Servers MAY restrict access to certain resources or actions for anonymous clients.
 
-### 3.3 Replay Protection (`X-MoH-Timestamp`)
-To prevent replay attacks, all signed requests **MUST** include an `X-MoH-Timestamp` (Unix epoch format). Servers **SHOULD** reject requests with a timestamp drift greater than 300 seconds.
+### 3.2 Subject Identification (`X-MoH-Sub`)
+The `X-MoH-Sub` header represents the sender's identity. In MoH, the identity is bound to the cryptographic key pair.
+* **Format**: The `X-MoH-Sub` MUST be the **Ed25519 Public Key** encoded as a **Hexadecimal** string.
+* **Length**: Exactly 64 characters (representing 32 bytes).
+* **Case**: Lowercase Hex is RECOMMENDED.
 
-### 3.4 Signature Calculation
-The signature **MUST** be calculated over a canonical string formed by:
-$$Payload = Method + Path + Timestamp + Body$$
-*(Note: Body is the raw Markdown string)*.
+### 3.3 Key Generation & Identity Creation
+To create a MoH identity, a client must:
+1.  **Generate an Ed25519 key pair**: Using a secure entropy source.
+2.  **Derive the Public Key**: Extract the 32-byte raw public key.
+3.  **Encode to Hex**: Convert the bytes to a 64-character string. This string becomes the permanent `X-MoH-Sub`.
+
+> **Implementation Example (JavaScript):**
+> ```javascript
+> import * as ed from '@noble/ed25519';
+> const privateKey = ed.utils.randomPrivateKey();
+> const publicKey = await ed.getPublicKey(privateKey);
+> const sub = Buffer.from(publicKey).toString('hex'); 
+> // Result: "f3b2...a1e0" (64 chars)
+> ```
 
 ---
 
-## 4. Notification & Callbacks
+## 4. Digital Signature (`X-MoH-Sig`)
+
+For authorized requests, the signature ensures that the message hasn't been tampered with and was sent by the owner of the `X-MoH-Sub`.
+
+### 4.1 Algorithm
+* **Type**: Ed25519.
+* **Encoding**: Hexadecimal (128 characters representing 64 bytes).
+
+### 4.2 Signature Calculation
+The signature MUST be calculated over a UTF-8 string formed by the concatenation of:
+$$Payload = Method + Path + Timestamp + Body$$
+
+* **Method**: Uppercase (e.g., `POST`).
+* **Path**: The full request path (e.g., `/status`).
+* **Timestamp**: The value of `X-MoH-Timestamp`.
+* **Body**: The raw, unparsed Markdown string.
+
+---
+
+## 5. Notification & Callbacks
 MoH supports a reactive "Push" model via the `X-MoH-Notify-URL` header.
 
-### 4.1 Subscription
+### 5.1 Subscription
 A client **MAY** include the `X-MoH-Notify-URL` header in any request. The server **MUST** store this URL and associate it with the sender's `sub`.
 
-### 4.2 Callback Execution
+### 5.2 Callback Execution
 When a server-side event occurs, the server **MUST** perform an HTTP POST request to the stored `Notify-URL`.
 * The payload **MUST** be a valid Markdown message.
 * The callback request **SHOULD** be signed by the server.
 
 ---
 
-## 5. Message Structure and Metadata
+## 6. Interaction Examples
+
+### 6.1 Authorized Request (Full Security)
+```http
+POST /update MoH/1.0
+Host: api.mohproto.org
+Content-Type: text/markdown
+X-MoH-Sub: 464f5245564552...[64 chars]
+X-MoH-Timestamp: 1713200000
+X-MoH-Sig: 58fb2...[128 chars]
+
+# Status update
+Authorized content.
+```
+
+### 6.2 Anonymous Request (No Sub/Sig)
+```http
+GET /public-info MoH/1.0
+Host: api.mohproto.org
+
+# Welcome
+This is a public page accessible without authorization.
+```
+
+### 6.3 Partial/Failed Authorization
+If a client provides `X-MoH-Sub` but the `X-MoH-Sig` is missing or invalid, the server **MUST** treat the request as unauthorized and **SHOULD** return an `HTTP 401 Unauthorized` response.
+
+---
+
+## 7. Message Structure and Metadata
 
 To maintain the purity of the content, MoH Proto **MUST NOT** use in-body metadata (such as Frontmatter). All service information, styling hints, and protocol instructions **MUST** be transmitted exclusively via HTTP headers prefixed with `X-MoH-*`.
 
-### 5.1 Content Format
+### 7.1 Content Format
 By default, all MoH messages use the **Original Markdown (Gruber's Markdown)**.
 * **Specification:** [Daring Fireball: Markdown Syntax](https://daringfireball.net/projects/markdown/syntax)
 
-### 5.2 Extended Syntax Negotiation
+### 7.2 Extended Syntax Negotiation
 If a client or server supports extended Markdown features (e.g., GFM, CommonMark), it **MUST** notify the counterparty via the `X-MoH-MD-Version` header.
 * **Default (if absent):** `original`
 * **Common values:** `gfm`, `commonmark`, `multimarkdown`.
@@ -82,9 +140,9 @@ MoH supports specific headers to provide a consistent visual identity within cli
 
 ---
 
-## 6. Updated Examples
+## 8. Updated Examples
 
-### 6.1 Standard Monitoring (Success)
+### 8.1 Standard Monitoring (Success)
 ```http
 POST /notify MoH/1.0
 Host: gateway.mohproto.org
@@ -98,7 +156,7 @@ X-MoH-Icon-Color: #2ECC71
 All nodes are reporting 100% uptime.
 ```
 
-### 6.2 Low-Power Alert (IoT Device)
+### 8.2 Low-Power Alert (IoT Device)
 Using a short HEX code for efficiency.
 
 ```http
@@ -116,7 +174,7 @@ Sensor level: 12%
 
 ---
 
-## 7. Security Considerations
+## 9. Security Considerations
 1.  **Transport Security**: All MoH traffic **SHOULD** be encrypted via TLS (HTTPS).
 2.  **Key Management**: Clients are responsible for the secure storage of their private keys.
 3.  **Privacy**: The `sub` and `Notify-URL` should be treated as sensitive data.
