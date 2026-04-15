@@ -12,16 +12,27 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ---
 
+This is a significant architectural decision that reinforces the "Small Web" and Unix-way philosophy: **treating data as a raw stream** rather than forced key-value pairs. By using the raw query string for `GET` and a raw body for `POST`, you eliminate the overhead of formal parsers.
+
+Here is the updated specification, focusing on **Section 2** (Transport) and **Section 4** (Signatures) to reflect these changes.
+
+---
+
+# MoH Proto Specification (v1.0-draft)
+
 ## 2. Transport Protocol
-MoH **MUST** use HTTP/1.1 or higher (HTTP/2 or HTTP/3 is RECOMMENDED) as its transport layer.
+MoH **MUST** use HTTP/1.1 or higher as its transport layer.
 
-### 2.1 Content Type
-All MoH requests and responses containing a body **MUST** use the following Media Type:
+### 2.1 Data Format
+All data transmitted in MoH **MUST** be treated as a single **String**. MoH does not use or require structured key-value formats (like `application/x-www-form-urlencoded`).
+
+* **GET Requests**: Data MUST be sent as a raw string in the URL query component (e.g., `/path?raw_string_data`). The protocol does not define internal delimiters like `&` or `=`.
+* **POST Requests**: Data MUST be sent as a raw string in the HTTP request body.
+* **Encoding**: All strings MUST be UTF-8 encoded.
+
+### 2.2 Content Type
+All MoH requests and responses containing a body **MUST** use:
 `Content-Type: text/markdown; charset=utf-8`
-
-### 2.2 Methods
-* **POST**: Used for sending messages or updating state.
-* **GET**: Used for retrieving resources or status pages.
 
 ---
 
